@@ -272,6 +272,40 @@ app.post("/api/tasks/:id/delete", async (req, res) => {
   }
 });
 
+// Migracion unica: reemplaza todas las tareas por las que traigamos de otro lado.
+// Protegido con una clave simple para que no cualquiera la dispare por accidente.
+const ADMIN_KEY = process.env.ADMIN_KEY || "migrar-cronograma-2026";
+app.post("/api/admin/import-tasks", async (req, res) => {
+  if (req.query.key !== ADMIN_KEY) return res.status(403).json({ error: "forbidden" });
+  const tasks = (req.body && req.body.tasks) || [];
+  if (!Array.isArray(tasks) || !tasks.length) return res.status(400).json({ error: "empty" });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("DELETE FROM tasks");
+    for (const t of tasks) {
+      await client.query(
+        `INSERT INTO tasks (id, seq, label, priority, progress, start, "end", owner, status, pending_note, progress_before_done, status_before_done)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+        [
+          t.id, t.seq || 0, t.label || "", t.priority || "MEDIA", t.progress || 0,
+          t.start || "", t.end || "", t.owner || "", t.status || "ABIERTO",
+          t.pendingNote || "", t.progressBeforeDone == null ? null : t.progressBeforeDone,
+          t.statusBeforeDone || null,
+        ]
+      );
+    }
+    await client.query("COMMIT");
+    res.json({ ok: true, imported: tasks.length });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error(err);
+    res.status(500).json({ error: "db_error" });
+  } finally {
+    client.release();
+  }
+});
+
 app.get("/api/history", async (req, res) => {
   try {
     const { rows } = await pool.query(
