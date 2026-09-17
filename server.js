@@ -318,30 +318,6 @@ app.get("/api/history", async (req, res) => {
   }
 });
 
-// ---------- presence (in-memory, ephemeral, resets on restart) ----------
-const presence = new Map(); // id -> { name, color, lastSeen }
-const PRESENCE_TTL_MS = 20000;
-
-app.post("/api/presence", (req, res) => {
-  const { id, name, color } = req.body || {};
-  if (!id) return res.status(400).json({ error: "missing_id" });
-  presence.set(id, { name: name || "Anónimo", color: color || "#8C99A4", lastSeen: Date.now() });
-  res.json({ ok: true });
-});
-
-app.get("/api/presence", (req, res) => {
-  const now = Date.now();
-  const out = [];
-  for (const [id, p] of presence.entries()) {
-    if (now - p.lastSeen > PRESENCE_TTL_MS) {
-      presence.delete(id);
-      continue;
-    }
-    out.push({ id, name: p.name, color: p.color });
-  }
-  res.json(out);
-});
-
 app.get("/health", (req, res) => res.json({ ok: true }));
 
 ensureSchema()

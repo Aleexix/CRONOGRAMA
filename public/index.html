@@ -53,11 +53,6 @@
   .brand svg{display:block;width:132px;height:44px;color:var(--ink);}
   .brand-meta{font-size:13px;letter-spacing:.12em;color:var(--faint);}
   .topbar-right{display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
-  .presence{display:flex;align-items:center;}
-  .presence:empty{display:none;}
-  .presence-dot{width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;border:2px solid var(--bg);margin-left:-8px;flex:none;cursor:default;}
-  .presence-dot:first-child{margin-left:0;}
-  .presence-count{margin-left:10px;font-size:11px;color:var(--faint);white-space:nowrap;}
   .namefield{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--faint);}
   .namefield input{font-size:12px;background:var(--surface);border:1px solid var(--border-strong);border-radius:5px;padding:6px 8px;color:var(--ink);width:132px;}
   .status{display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.06em;color:var(--faint);}
@@ -234,7 +229,6 @@
       <div class="brand-meta mono">BCM COLOMBIA · SEPTIEMBRE 2026</div>
     </div>
     <div class="topbar-right">
-      <div class="presence" id="presenceBar"></div>
       <div class="namefield">Editas como <input type="text" id="userName" placeholder="tu nombre"></div>
       <div class="status" id="saveStatus"><span class="dot"></span><span class="txt">conectando…</span></div>
     </div>
@@ -324,7 +318,6 @@
     sort: { by: 'end', dir: 'asc' },
     tasks: [],
     history: [],
-    roomPeers: [],
     ready: false,
     mode: 'connecting' // connecting | db | local
   };
@@ -337,44 +330,6 @@
   function getUserName(){ try { return localStorage.getItem(USER_KEY) || ''; } catch(e){ return ''; } }
   function setUserName(v){ try { localStorage.setItem(USER_KEY, v); } catch(e){} }
 
-  // ---------- live presence (who's viewing now) ----------
-  var myPeerId = 'p-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
-  function colorForName(name){
-    var s = String(name||'');
-    var hash = 0;
-    for (var i=0;i<s.length;i++){ hash = (hash*31 + s.charCodeAt(i)) >>> 0; }
-    return 'hsl('+(hash%360)+',60%,50%)';
-  }
-  function renderPresence(){
-    var el = document.getElementById('presenceBar');
-    if (!el) return;
-    var viewers = state.roomPeers || [];
-    if (!viewers.length){ el.innerHTML=''; return; }
-    var dots = viewers.map(function(p){
-      var label = p.name + (p.id === myPeerId ? ' (tú)' : '');
-      return '<span class="presence-dot" style="background:'+esc(p.color)+'" title="'+esc(label)+'">'+esc(ownerInitials(p.name))+'</span>';
-    }).join('');
-    el.innerHTML = dots + '<span class="presence-count mono">'+viewers.length+' en línea</span>';
-  }
-  function presenceHeartbeat(){
-    var name = getUserName() || 'Anónimo';
-    apiSend('/api/presence', 'POST', { id: myPeerId, name: name, color: colorForName(name) }).catch(function(){});
-  }
-  function pollPresence(){
-    apiGet('/api/presence').then(function(peers){
-      state.roomPeers = peers || [];
-      renderPresence();
-    }).catch(function(){});
-  }
-  function initRoom(){
-    presenceHeartbeat();
-    pollPresence();
-    setInterval(presenceHeartbeat, 8000);
-    setInterval(pollPresence, 5000);
-  }
-  function updateRoomName(){
-    presenceHeartbeat();
-  }
 
   // ---------- persistence layer (own backend, works for anyone with the link) ----------
   var store = { subscribe:function(){}, add:function(){}, update:function(){}, remove:function(){} };
@@ -1036,14 +991,12 @@
   var userNameInput = document.getElementById('userName');
   userNameInput.value = getUserName();
   userNameInput.addEventListener('change', function(){
-    var v = userNameInput.value.trim();
-    setUserName(v);
-    updateRoomName(v || 'Anónimo');
+    setUserName(userNameInput.value.trim());
   });
 
   function initApp(){
     var existing = getUserName();
-    if (existing) { boot(); initRoom(); return; }
+    if (existing) { boot(); return; }
     var modal = document.getElementById('nameModal');
     var input = document.getElementById('nameModalInput');
     var btn = document.getElementById('nameModalBtn');
@@ -1057,7 +1010,6 @@
       userNameInput.value = v;
       modal.hidden = true;
       boot();
-      initRoom();
     }
     btn.addEventListener('click', submit);
     input.addEventListener('keydown', function(e){ if (e.key === 'Enter') submit(); });
