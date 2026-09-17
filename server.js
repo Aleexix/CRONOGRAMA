@@ -68,9 +68,12 @@ async function ensureSchema() {
       status TEXT NOT NULL DEFAULT 'ABIERTO',
       pending_note TEXT NOT NULL DEFAULT '',
       progress_before_done INTEGER,
-      status_before_done TEXT
+      status_before_done TEXT,
+      description TEXT NOT NULL DEFAULT ''
     );
   `);
+  // migracion idempotente para bases ya existentes (creadas antes de agregar esta columna)
+  await pool.query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT ''`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS history (
       id SERIAL PRIMARY KEY,
@@ -110,6 +113,7 @@ function rowToTask(row) {
     owner: row.owner,
     status: row.status,
     pendingNote: row.pending_note,
+    description: row.description,
     progressBeforeDone: row.progress_before_done == null ? undefined : row.progress_before_done,
     statusBeforeDone: row.status_before_done || undefined,
   };
@@ -136,6 +140,7 @@ const FIELD_TO_COLUMN = {
   owner: "owner",
   status: "status",
   pendingNote: "pending_note",
+  description: "description",
   progressBeforeDone: "progress_before_done",
   statusBeforeDone: "status_before_done",
 };
